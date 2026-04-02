@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wyniki z Pakierni</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body {
+  font-family: Arial;
+  background: linear-gradient(135deg, #1f1f2e, #12121b);
+  color: #f0f0f0;
+  margin: 0;
+  padding: 10px;
+}
+.container { max-width: 500px; margin: auto; }
+h1 { text-align: center; }
+
+/* GRID */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+/* CARD */
+.card {
+  background: #2c2c3c;
+  border-radius: 12px;
+  padding: 8px;
+  text-align: center;
+  cursor: pointer;
+  overflow: hidden;
+  transition: 0.3s;
+}
+.card:hover { transform: scale(1.08); }
+
+.card img {
+  width: 100%;
+  border-radius: 10px;
+  transition: 0.3s;
+}
+.card:hover img { transform: scale(1.2); }
+
+.card.push { border: 2px solid #e33; }
+.card.pull { border: 2px solid #3e8ee3; }
+.card.legs { border: 2px solid #3ee37a; }
+
+.card.selected { 
+  border: 3px solid #ff9800;
+  background: #fff;
+  color: #000;
+}
+
+/* INPUT */
+input.compact { width: 48%; padding: 4px; margin-top: 4px; }
+button.compact { width: 48%; padding: 4px; margin-top: 4px; }
+
+/* HISTORIA */
+.entry {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+.entry.highlight { background: #2563eb33; border-radius: 6px; padding: 2px 4px; }
+.delete {
+  font-size: 10px;
+  padding: 1px 3px;
+  background: #e33;
+  color: white;
+  border: none;
+  border-radius: 3px;
+}
+
+/* LEGENDA */
+.legend {
+  font-size: 12px;
+  margin: 8px 0;
+}
+.legend span {
+  margin-right: 10px;
+}
+.box {
+  display:inline-block;
+  width:10px;
+  height:10px;
+  margin-right:4px;
+}
+.pushC { background:#e33; }
+.pullC { background:#3e8ee3; }
+.legsC { background:#3ee37a; }
+
+/* KOMENTARZE */
+.comment.slow { color:#e33; }
+.comment.medium { color:#f2c94c; }
+.comment.good { color:#4caf50; }
+.comment.elite { color:#00c853; }
+
+canvas {
+  background:#2c2c3c;
+  border-radius:10px;
+  margin-top:10px;
+}
+</style>
+</head>
+
+<body>
+<div class="container">
+
+<h1>🏋️ Wyniki z Pakierni</h1>
+
+<!-- INFO -->
+<div style="font-size:13px;">
+👉 Wpisz swoją wagę
+</div>
+
+<!-- WAGA -->
+<div>
+<input id="weight" type="number" placeholder="Waga (kg)" class="compact">
+<button onclick="saveProfile()" class="compact">Zapisz</button>
+</div>
+
+<!-- WYSZUKIWARKA -->
+<input id="search" placeholder="Szukaj ćwiczenia..." class="compact" oninput="renderGrid()">
+
+<!-- LEGENDA -->
+<div class="legend">
+<span><span class="box pushC"></span>Push</span>
+<span><span class="box pullC"></span>Pull</span>
+<span><span class="box legsC"></span>Legs</span>
+</div>
+
+<!-- GRID -->
+<div id="exerciseGrid" class="grid"></div>
+<div id="groupButtons"></div>
+
+<!-- DODAWANIE -->
+<div>
+<input id="kg" type="number" placeholder="kg" class="compact">
+<input id="reps" type="number" placeholder="powtórzenia" class="compact">
+<button onclick="add()" class="compact">Dodaj</button>
+</div>
+
+<h3 id="historyTitle"></h3>
+<div id="list"></div>
+
+<canvas id="chart"></canvas>
+
+<h3>Rekordy</h3>
+<div id="records"></div>
+
+<button onclick="exportCSV()">CSV</button>
+
+</div>
+
+<script>
+/* ===== ĆWICZENIA ===== */
+const exerciseGroups=[
+[
+{id:"bench_press",name:"Wyciskanie",img:"images/bench_press.avif",type:"push"},
+{id:"squat",name:"Przysiad",img:"images/squat.avif",type:"legs"},
+{id:"deadlift",name:"Martwy ciąg",img:"images/hex_bar_deadlift.avif",type:"legs"}
+],
+[
+{id:"cable_bicep_curl",name:"Biceps linka",img:"images/cable_bicep_curl.avif",type:"pull"},
+{id:"dumbbell_curl",name:"Biceps hantle",img:"images/dumbbell_curl.avif",type:"pull"},
+{id:"lying_leg_curl",name:"Dwójki maszyna",img:"images/lying_leg_curl.avif",type:"legs"},
+{id:"tricep_pushdown",name:"Triceps linka",img:"images/tricep_pushdown.avif",type:"push"},
+{id:"dumbbell_tricep",name:"Triceps hantle",img:"images/dumbbell_tricep.avif",type:"push"},
+{id:"leg_extension",name:"Czwórki maszyna",img:"images/leg_extension.avif",type:"legs"},
+{id:"machine_row",name:"Wiosłowanie hammer",img:"images/machine_row.avif",type:"pull"},
+{id:"seated_cable_row",name:"Wiosłowanie linka",img:"images/seated_cable_row.avif",type:"pull"},
+{id:"lat_pulldown",name:"Ściąganie drążka",img:"images/lat_pulldown.avif",type:"pull"}
+],
+[
+{id:"cable_lateral_raise",name:"Wznosy bokiem linka",img:"images/cable_lateral_raise.avif",type:"push"},
+{id:"face_pull",name:"Przyciąganie do twarzy linka",img:"images/face_pull.avif",type:"pull"},
+{id:"incline_bench",name:"Wyciskanie na skosie",img:"images/incline_bench.avif",type:"push"},
+{id:"00",name:"Rozpiętki hantle",img:"images/00.avif",type:"push"},
+{id:"machine_chest_fly",name:"Butterfly",img:"images/machine_chest_fly.avif",type:"push"},
+{id:"machine_shoulder_press",name:"Barki hammer",img:"images/machine_shoulder_press.avif",type:"push"},
+{id:"military_press",name:"Żołnierskie",img:"images/military_press.avif",type:"push"},
+{id:"pull_ups",name:"Podciąganie",img:"images/pull_ups.avif",type:"pull"},
+{id:"upright_row",name:"Przyciąganie sztangi",img:"images/upright_row.avif",type:"pull"}
+],
+[
+{id:"barbell_calf_raise",name:"Łydki",img:"images/barbell_calf_raise.avif",type:"legs"},
+{id:"bent_over_row",name:"Wiosłowanie sztangą",img:"images/bent_over_row.avif",type:"pull"},
+{id:"cable_fly",name:"Rozpiętki linka",img:"images/cable_fly.avif",type:"legs"},
+{id:"chest_press",name:"Wyciskanie hammer",img:"images/chest_press.avif",type:"push"},
+{id:"dips",name:"Dipy",img:"images/dips.avif",type:"push"},
+{id:"dumbbell_bench_press",name:"Wyciskanie hantlami",img:"images/dumbbell_bench_press.avif",type:"push"},
+{id:"dumbbell_bulgarian_split_squat",name:"Bułgary",img:"images/dumbbell_bulgarian_split_squat.avif",type:"legs"},
+{id:"dumbbell_incline_y_raise",name:"Superman",img:"images/dumbbell_incline_y_raise.avif",type:"pull"},
+{id:"dumbbell_lateral_raise",name:"Hantle do boku",img:"images/dumbbell_lateral_raise.avif",type:"pull"},
+{id:"dumbbell_pullover",name:"Przenoszenie hantla",img:"images/dumbbell_pullover.avif",type:"pull"},
+{id:"dumbbell_romanian_deadlift",name:"Bułgarski martwy ciąg",img:"images/dumbbell_romanian_deadlift.avif",type:"legs"},
+{id:"dumbbell_row",name:"Wiosłowanie hantlem",img:"images/dumbbell_row.avif",type:"pull"},
+{id:"ez_bar_curl",name:"Biceps łamana",img:"images/ez_bar_curl.avif",type:"pull"},
+{id:"hammer_curl",name:"Młotki",img:"images/hammer_curl.avif",type:"pull"},
+{id:"hip_thrust",name:"Wypychanie bioder",img:"images/hip_thrust.avif",type:"legs"},
+{id:"incline_dumbbell_bench",name:"Wyciskanie hantli skos",img:"images/incline_dumbbell_bench.avif",type:"push"},
+{id:"lying_tricep_extension",name:"Francuskie",img:"images/lying_tricep_extension.avif",type:"push"},
+{id:"machine_reverse",name:"Anty Butterfly",img:"images/machine_reverse.avif",type:"pull"},
+{id:"one_arm_landmine_press",name:"Wyciskanie półsztangi",img:"images/one_arm_landmine_press.avif",type:"push"},
+{id:"seated_dumbbell_shoulder_press",name:"Barki hantle",img:"images/seated_dumbbell_shoulder_press.avif",type:"push"},
+{id:"sled_leg",name:"Sanki",img:"images/sled_leg.avif",type:"legs"},
+{id:"straight_arm_pulldown",name:"Prostopadłe przyciąganie linki",img:"images/straight_arm_pulldown.avif",type:"pull"},
+{id:"t_bar_row",name:"Wiosłowanie półsztangą",img:"images/t_bar_row.avif",type:"pull"},
+{id:"walking_lunge",name:"Spacer",img:"images/walking_lunge.avif",type:"legs"}
+]
+];
+
+let visibleGroups=1;
+let selected="bench_press";
+let data=JSON.parse(localStorage.getItem("gym"))||{};
+let profile=JSON.parse(localStorage.getItem("profile"))||{weight:80};
+document.getElementById("weight").value=profile.weight;
+let chart;
+
+/* ===== KOMENTARZE ===== */
+function getComment(ex,kg){
+  const BW = profile.weight;
+  if(ex==="bench_press"){
+    if(kg < 0.75*BW) return '<span class="comment slow">Chudy szczur</span>';
+    if(kg < 1.22*BW) return '<span class="comment medium">Mały - Wielki chłop</span>';
+    if(kg < 1.75*BW) return '<span class="comment good">Wielki chłop</span>';
+    return '<span class="comment elite">Elitarny Wielki chłop</span>';
+  }
+  if(ex==="squat"){
+    if(kg < 1.0*BW) return '<span class="comment slow">Chudy szczur</span>';
+    if(kg < 1.25*BW) return '<span class="comment medium">Mały - Wielki chłop</span>';
+    if(kg < 1.75*BW) return '<span class="comment good">Wielki chłop</span>';
+    return '<span class="comment elite">Elitarny Wielki chłop</span>';
+  }
+  if(ex==="deadlift"){
+    if(kg < 1.5*BW) return '<span class="comment slow">Chudy szczur</span>';
+    if(kg < 2.0*BW) return '<span class="comment medium">Mały - Wielki chłop</span>';
+    if(kg < 2.75*BW) return '<span class="comment good">Wielki chłop</span>';
+    return '<span class="comment elite">Elitarny Wielki chłop</span>';
+  }
+  return "";
+}
+
+/* ===== GRID ===== */
+function renderGrid(){
+  const grid=document.getElementById("exerciseGrid");
+  grid.innerHTML="";
+  let list=[];
+  for(let i=0;i<visibleGroups;i++) list=list.concat(exerciseGroups[i]);
+
+  const search=document.getElementById("search").value.toLowerCase();
+  list=list.filter(e=>e.name.toLowerCase().includes(search));
+
+  list.forEach(ex=>{
+    const div=document.createElement("div");
+    div.className=`card ${ex.type} ${selected===ex.id?"selected":""}`;
+    div.innerHTML=`<img src="${ex.img}"><div>${ex.name}</div>`;
+    div.onclick=()=>{selected=ex.id; renderGrid(); renderHistory();};
+    grid.appendChild(div);
+  });
+
+  renderButtons();
+}
+
+/* ===== BUTTONY ===== */
+function renderButtons(){
+  const div=document.getElementById("groupButtons");
+  div.innerHTML="";
+  if(visibleGroups<4) div.innerHTML+=`<button onclick="visibleGroups++;renderGrid()">Więcej</button>`;
+  if(visibleGroups>1) div.innerHTML+=`<button onclick="visibleGroups--;renderGrid()">Mniej</button>`;
+}
+
+/* ===== ADD ===== */
+function add(){
+  if(!data[selected]) data[selected]=[];
+  let kg=Number(document.getElementById("kg").value);
+  let reps=Number(document.getElementById("reps").value);
+  if(kg && reps){
+    data[selected].push({kg,reps,date:new Date().toISOString()});
+    localStorage.setItem("gym",JSON.stringify(data));
+    renderHistory();
+    renderRecords();
+  }
+}
+
+/* ===== HISTORIA ===== */
+function renderHistory(){
+  const name=getAll().find(e=>e.id===selected).name;
+  document.getElementById("historyTitle").textContent="Historia "+name;
+
+  const arr=(data[selected]||[]).sort((a,b)=>new Date(b.date)-new Date(a.date));
+
+  const list=document.getElementById("list");
+  list.innerHTML="";
+
+  if(arr.length===0) return;
+
+  const maxKg = Math.max(...arr.map(e=>e.kg));
+
+  arr.forEach((e,i)=>{
+    const highlight = e.kg === maxKg ? "highlight" : "";
+    list.innerHTML+=`
+      <div class="entry ${highlight}">
+        <div>${new Date(e.date).toLocaleDateString()} - ${e.kg}kg x ${e.reps}</div>
+        <button class="delete" onclick="remove(${i})">x</button>
+      </div>`;
+  });
+
+  updateChart(arr,name);
+}
+
+/* ===== CHART ===== */
+function updateChart(arr,name){
+  const ctx=document.getElementById("chart");
+  if(chart) chart.destroy();
+
+  chart=new Chart(ctx,{
+    type:"line",
+    data:{
+      labels:arr.map(e=>new Date(e.date).toLocaleDateString()).reverse(),
+      datasets:[{data:arr.map(e=>e.kg).reverse()}]
+    },
+    options:{
+      plugins:{
+        legend:{display:false},
+        title:{display:true,text:name,color:"#fff"}
+      }
+    }
+  });
+}
+
+/* ===== REMOVE ===== */
+function remove(i){
+  if(confirm("Usunąć wpis?")){
+    data[selected].splice(i,1);
+    localStorage.setItem("gym",JSON.stringify(data));
+    renderHistory();
+    renderRecords();
+  }
+}
+
+/* ===== RECORDS ===== */
+function renderRecords(){
+  const rec=document.getElementById("records");
+  rec.innerHTML="";
+  ["bench_press","squat","deadlift"].forEach(ex=>{
+    const arr=data[ex]||[];
+    if(arr.length){
+      const max=Math.max(...arr.map(e=>e.kg));
+      rec.innerHTML+=`<div>${getAll().find(x=>x.id===ex).name}: ${max}kg - ${getComment(ex,max)}</div>`;
+    }
+  });
+}
+
+/* ===== PROFILE ===== */
+function saveProfile(){
+  profile.weight=Number(document.getElementById("weight").value)||80;
+  localStorage.setItem("profile",JSON.stringify(profile));
+  renderRecords();
+}
+
+/* ===== CSV ===== */
+function exportCSV(){
+  let csv="ex;kg;reps;date\r\n"; // ; zamiast ,
+
+  Object.keys(data).forEach(ex=>{
+    data[ex].forEach(e=>{
+      csv+=`${ex};${e.kg};${e.reps};${e.date}\r\n`;
+    });
+  });
+
+  // UTF-8 + BOM (żeby Excel dobrze czytał)
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+
+  let a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="gym.csv";
+
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+
+  URL.revokeObjectURL(a.href);
+}
+
+function getAll(){return exerciseGroups.flat();}
+
+renderGrid();
+renderHistory();
+renderRecords();
+</script>
+</body>
+</html>
